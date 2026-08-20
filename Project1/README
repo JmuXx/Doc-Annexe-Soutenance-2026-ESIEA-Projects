@@ -1,0 +1,4 @@
+make challenge1 -> génère chess1, le binaire du premier chall
+make challenge2 -> génère chess2, le binaire du deuxième chall
+
+
