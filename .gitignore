@@ -1,3 +1,7 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
 # Visual Studio
 .vs/
 **/.vs/
@@ -14,9 +18,9 @@ build/
 *.exp
 *.lib
 
-# Fichiers Visual Studio temporaires
+# Base de données Visual Studio
 *.VC.db
 *.VC.opendb
 
-# DLL générée automatiquement dans plugins
+# DLL générées par la compilation
 Projet 3 - FlipResetDetector/plugins/*.dll
