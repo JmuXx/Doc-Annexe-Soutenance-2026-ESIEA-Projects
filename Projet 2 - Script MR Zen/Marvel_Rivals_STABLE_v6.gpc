@@ -1,0 +1,1474 @@
+/* ==============================================================================
+   MARVEL RIVALS - SCRIPT SYSTEM
+   ============================================================================== */
+
+define CHAR_SPIDERMAN     = 0;
+define CHAR_BLACKCAT      = 1;
+define CHAR_MAGIK         = 2;
+define CHAR_NAMOR         = 3;
+define CHAR_MAGNETO       = 4;
+define CHAR_DRSTRANGE     = 5;
+define CHAR_WINTERSOLDIER = 6;
+define CHAR_HELA          = 7;
+define CHAR_PSYLOCKE      = 8;
+define CHAR_ELSA          = 9;
+
+define TOTAL_CHARS = 10;
+
+define TYPE_MELEE      = 0;
+define TYPE_PROJECTILE = 1;
+define TYPE_HITSCAN    = 2;
+
+define LOCK_GESTURE_TIME = 700;
+
+
+/* ==============================================================================
+   OLED STRINGS
+   ============================================================================== */
+
+const string TXT_SPIDERMAN     = "SPIDER-MAN";
+const string TXT_BLACKCAT      = "BLACK CAT";
+const string TXT_MAGIK         = "MAGIK";
+const string TXT_NAMOR         = "NAMOR";
+const string TXT_MAGNETO       = "MAGNETO";
+const string TXT_DRSTRANGE     = "DR STRANGE";
+const string TXT_WINTERSOLDIER = "WINTER SOLDIER";
+const string TXT_HELA          = "HELA";
+const string TXT_PSYLOCKE      = "PSYLOCKE";
+const string TXT_ELSA          = "ELSA";
+
+const string TXT_LOCKED        = "LOCKED";
+const string TXT_UNLOCKED      = "UNLOCKED";
+
+const string TXT_AA_ON         = "AA: ON";
+const string TXT_AA_OFF        = "AA: OFF";
+
+const string TXT_MACROS_ON     = "MACROS: ON";
+const string TXT_MACROS_OFF    = "MACROS: OFF";
+
+
+/* ==============================================================================
+   VARIABLES
+   ============================================================================== */
+
+int selected_char = 0;
+int char_type = TYPE_MELEE;
+
+int char_deadzone  = 8;
+int char_threshold = 12;
+
+int macros_enabled = FALSE;
+int aim_assist_enabled = FALSE;
+
+int hela_proj_timer = 0;
+
+int current_aa_type = 0;
+int is_aiming_or_firing = FALSE;
+
+int update_display = TRUE;
+
+int profile_locked = FALSE;
+
+int lock_up_seen = FALSE;
+int lock_down_seen = FALSE;
+int lock_window = 0;
+int lock_gesture_armed = TRUE;
+
+int macro_busy = FALSE;
+
+
+/* ==============================================================================
+   INIT
+   ============================================================================== */
+
+init {
+
+    call_active_char_profile();
+
+    update_display = TRUE;
+}
+
+
+/* ==============================================================================
+   MAIN
+   ============================================================================== */
+
+main {
+
+    macro_busy = (
+        combo_running(spidey_down_slam)
+        || combo_running(spidy_sekkombo)
+        || combo_running(spidy_bnb)
+        || combo_running(spidy_yoyo_combo)
+        || combo_running(blackcat_250_bnb3)
+        || combo_running(magik_bnb_appro1)
+        || combo_running(magik_2d_combo)
+        || combo_running(magik_bnb)
+        || combo_running(strange_bnb)
+        || combo_running(hela_bnb)
+        || combo_running(psylocke_250_bnb)
+        || combo_running(psylocke_275_bnb)
+        || combo_running(elsa_250_bnb)
+        || combo_running(elsa_300_bnb)
+    );
+
+    if (!macro_busy) {
+
+    /* ======================================================================
+       LOCK TIMER
+       ====================================================================== */
+
+    if (lock_window > 0) {
+
+        lock_window = lock_window - get_rtime();
+
+        if (lock_window <= 0) {
+
+            lock_window = 0;
+            lock_up_seen = FALSE;
+            lock_down_seen = FALSE;
+        }
+    }
+
+
+    /* ======================================================================
+       LOCK / UNLOCK
+       HOLD L2 + R2 THEN PRESS UP + DOWN
+       ====================================================================== */
+
+    if (
+        get_ival(PS4_L2) > 80
+        &&
+        get_ival(PS4_R2) > 80
+    ) {
+
+        if (event_press(PS4_UP)) {
+
+            lock_up_seen = TRUE;
+            lock_window = LOCK_GESTURE_TIME;
+        }
+
+        if (event_press(PS4_DOWN)) {
+
+            lock_down_seen = TRUE;
+            lock_window = LOCK_GESTURE_TIME;
+        }
+
+        if (
+            lock_up_seen
+            &&
+            lock_down_seen
+            &&
+            lock_gesture_armed
+        ) {
+
+            profile_locked = !profile_locked;
+
+            lock_gesture_armed = FALSE;
+
+            lock_up_seen = FALSE;
+            lock_down_seen = FALSE;
+            lock_window = 0;
+
+            combo_run(notify_profile_lock);
+
+            update_display = TRUE;
+        }
+
+        set_val(PS4_LEFT, 0);
+        set_val(PS4_RIGHT, 0);
+        set_val(PS4_UP, 0);
+        set_val(PS4_DOWN, 0);
+    }
+
+    else {
+
+        if (
+            get_ival(PS4_L2) < 20
+            &&
+            get_ival(PS4_R2) < 20
+        ) {
+
+            lock_gesture_armed = TRUE;
+        }
+
+        lock_up_seen = FALSE;
+        lock_down_seen = FALSE;
+        lock_window = 0;
+
+
+        /* ==================================================================
+           MENU
+           ================================================================== */
+
+        if (
+            !profile_locked
+            &&
+            get_ival(PS4_L2) > 80
+        ) {
+
+            if (event_press(PS4_RIGHT)) {
+
+                selected_char = selected_char + 1;
+
+                if (selected_char >= TOTAL_CHARS) {
+                    selected_char = 0;
+                }
+
+                call_active_char_profile();
+                combo_run(notify_change);
+
+                update_display = TRUE;
+            }
+
+
+            if (event_press(PS4_LEFT)) {
+
+                selected_char = selected_char - 1;
+
+                if (selected_char < 0) {
+                    selected_char = TOTAL_CHARS - 1;
+                }
+
+                call_active_char_profile();
+                combo_run(notify_change);
+
+                update_display = TRUE;
+            }
+
+
+            if (event_press(PS4_UP)) {
+
+                aim_assist_enabled = !aim_assist_enabled;
+
+                combo_run(notify_toggle);
+
+                update_display = TRUE;
+            }
+
+
+            if (event_press(PS4_DOWN)) {
+
+                macros_enabled = !macros_enabled;
+
+                combo_run(notify_toggle);
+
+                update_display = TRUE;
+            }
+
+
+            set_val(PS4_LEFT, 0);
+            set_val(PS4_RIGHT, 0);
+            set_val(PS4_UP, 0);
+            set_val(PS4_DOWN, 0);
+        }
+    }
+
+    }
+
+    /* ======================================================================
+       HELA TIMER
+       ====================================================================== */
+
+    if (hela_proj_timer > 0) {
+
+        hela_proj_timer = hela_proj_timer - get_rtime();
+
+        if (hela_proj_timer < 0) {
+            hela_proj_timer = 0;
+        }
+    }
+
+
+    /* ======================================================================
+       AIM ASSIST REINFORCEMENT - 3 TYPES
+       ====================================================================== */
+
+    current_aa_type = char_type;
+
+    /* AAR active continuously whenever Aim Assist is enabled.
+       No R2 / right-stick activity requirement. */
+    is_aiming_or_firing = TRUE;
+
+
+    /* Hela keeps the existing temporary projectile override after L2. */
+    if (selected_char == CHAR_HELA) {
+
+        if (!macro_busy && event_press(PS4_L2)) {
+
+            hela_proj_timer = 2000;
+        }
+
+        if (hela_proj_timer > 0) {
+
+            current_aa_type = TYPE_PROJECTILE;
+
+            is_aiming_or_firing = TRUE;
+        }
+    }
+
+
+    if (
+        !macro_busy
+        &&
+        aim_assist_enabled
+        &&
+        is_aiming_or_firing
+    ) {
+
+        /*
+           HITSCAN
+           Regular vertical ellipse.
+           Baseline validated with Hela:
+           RX ~= +/-4, RY ~= +/-8, 15 ms per point.
+        */
+        if (current_aa_type == TYPE_HITSCAN) {
+
+            if (
+                abs(get_ival(PS4_RX)) <= 5
+                &&
+                abs(get_ival(PS4_RY)) <= 5
+            ) {
+
+                if (!combo_running(aa_hitscan_profile)) {
+                    combo_run(aa_hitscan_profile);
+                }
+            }
+
+            else if (combo_running(aa_hitscan_profile)) {
+                combo_stop(aa_hitscan_profile);
+            }
+        }
+
+
+        /*
+           PROJECTILE
+           Same principle as Hitscan, but softer/slower so manual lead
+           remains easier:
+           RX ~= +/-4, RY ~= +/-6, 17 ms per point.
+        */
+        else if (current_aa_type == TYPE_PROJECTILE) {
+
+            if (
+                abs(get_ival(PS4_RX)) <= 5
+                &&
+                abs(get_ival(PS4_RY)) <= 5
+            ) {
+
+                if (!combo_running(aa_projectile_profile)) {
+                    combo_run(aa_projectile_profile);
+                }
+            }
+
+            else if (combo_running(aa_projectile_profile)) {
+                combo_stop(aa_projectile_profile);
+            }
+        }
+
+
+        /*
+           MELEE
+           Irregular/asymmetrical short-range profile.
+           Frequent direction changes, deliberately non-circular.
+        */
+        else if (current_aa_type == TYPE_MELEE) {
+
+            if (
+                abs(get_ival(PS4_RX)) <= 6
+                &&
+                abs(get_ival(PS4_RY)) <= 6
+            ) {
+
+                if (!combo_running(aa_melee_profile)) {
+                    combo_run(aa_melee_profile);
+                }
+            }
+
+            else if (combo_running(aa_melee_profile)) {
+                combo_stop(aa_melee_profile);
+            }
+        }
+    }
+
+    else {
+
+        if (combo_running(aa_hitscan_profile)) {
+            combo_stop(aa_hitscan_profile);
+        }
+
+        if (combo_running(aa_projectile_profile)) {
+            combo_stop(aa_projectile_profile);
+        }
+
+        if (combo_running(aa_melee_profile)) {
+            combo_stop(aa_melee_profile);
+        }
+    }
+
+
+    /* ======================================================================
+       D-PAD COMBOS
+       ====================================================================== */
+
+    if (
+        !macro_busy
+        &&
+        macros_enabled
+        &&
+        profile_locked
+        &&
+        !(
+            get_ival(PS4_L2) > 80
+            &&
+            get_ival(PS4_R2) > 80
+        )
+    ) {
+
+
+        /* SPIDER-MAN */
+
+        if (selected_char == CHAR_SPIDERMAN) {
+
+            if (event_press(PS4_UP)) {
+                combo_run(spidy_sekkombo);
+            }
+
+            if (event_press(PS4_RIGHT)) {
+                combo_run(spidy_bnb);
+            }
+
+            if (event_press(PS4_DOWN)) {
+                combo_run(spidy_yoyo_combo);
+            }
+
+            if (event_press(PS4_LEFT)) {
+                combo_run(spidey_down_slam);
+            }
+        }
+
+
+        /* BLACK CAT */
+
+        else if (selected_char == CHAR_BLACKCAT) {
+
+            if (event_press(PS4_DOWN)) {
+                combo_run(blackcat_250_bnb3);
+            }
+        }
+
+
+        /* MAGIK */
+
+        else if (selected_char == CHAR_MAGIK) {
+
+            if (event_press(PS4_UP)) {
+                combo_run(magik_bnb_appro1);
+            }
+
+            if (event_press(PS4_RIGHT)) {
+                combo_run(magik_2d_combo);
+            }
+
+            if (event_press(PS4_DOWN)) {
+                combo_run(magik_bnb);
+            }
+        }
+
+
+        /* NAMOR */
+
+        else if (selected_char == CHAR_NAMOR) {
+
+        }
+
+
+        /* MAGNETO */
+
+        else if (selected_char == CHAR_MAGNETO) {
+		    
+			if (event_press(PS4_UP)) {
+                combo_run(magneto_bnb);
+            }
+        }
+
+
+        /* DR STRANGE */
+
+        else if (selected_char == CHAR_DRSTRANGE) {
+
+            if (event_press(PS4_UP)) {
+                combo_run(strange_bnb);
+            }
+        }
+
+
+        /* WINTER SOLDIER */
+
+        else if (selected_char == CHAR_WINTERSOLDIER) {
+
+        }
+
+
+        /* HELA */
+
+        else if (selected_char == CHAR_HELA) {
+
+            if (event_press(PS4_UP)) {
+                combo_run(hela_bnb);
+            }
+        }
+
+
+        /* PSYLOCKE */
+
+        else if (selected_char == CHAR_PSYLOCKE) {
+
+            if (event_press(PS4_UP)) {
+                combo_run(psylocke_250_bnb);
+            }
+
+            if (event_press(PS4_RIGHT)) {
+                combo_run(psylocke_275_bnb);
+            }
+
+        }
+
+
+        /* ELSA */
+
+        else if (selected_char == CHAR_ELSA) {
+
+            if (event_press(PS4_UP)) {
+                combo_run(elsa_250_bnb);
+            }
+
+            if (event_press(PS4_RIGHT)) {
+                combo_run(elsa_300_bnb);
+            }
+        }
+
+
+        set_val(PS4_UP, 0);
+        set_val(PS4_RIGHT, 0);
+        set_val(PS4_DOWN, 0);
+        set_val(PS4_LEFT, 0);
+    }
+
+
+    /* ======================================================================
+       OLED
+       ====================================================================== */
+
+    if (update_display) {
+
+        draw_display();
+
+        update_display = FALSE;
+    }
+}
+
+
+/* ==============================================================================
+   SPIDER-MAN
+   ============================================================================== */
+
+combo spidey_down_slam {
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_CROSS, 100);
+    wait(40);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_CROSS, 0);
+    wait(40);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_CROSS, 100);
+    wait(40);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_CROSS, 0);
+    wait(150);
+
+    set_val(PS4_R2, 0);
+}
+
+
+combo spidy_sekkombo {
+
+    set_val(PS4_L2, 100);
+    wait(50);
+
+    set_val(PS4_L2, 0);
+    wait(110);
+
+    set_val(PS4_R1, 100);
+    wait(50);
+
+    set_val(PS4_R1, 0);
+    wait(664);
+
+    set_val(PS4_CROSS, 100);
+    wait(50);
+
+    set_val(PS4_CROSS, 0);
+    wait(244);
+
+    set_val(PS4_R2, 100);
+    wait(304);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_L2, 100);
+    wait(50);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_L2, 0);
+    wait(50);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_CROSS, 100);
+    wait(50);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_CROSS, 0);
+    wait(94);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_SQUARE, 100);
+    wait(50);
+
+    set_val(PS4_R2, 0);
+    set_val(PS4_SQUARE, 0);
+}
+
+combo spidy_bnb {
+
+    set_val(PS4_R3, 100);
+    wait(50);
+
+    set_val(PS4_R3, 0);
+    wait(691);
+
+
+    set_val(PS4_SQUARE, 100);
+    wait(50);
+
+    set_val(PS4_SQUARE, 0);
+    wait(287);
+
+
+    // Swing seul pour que l'état soit reconnu
+    set_val(PS4_L1, 100);
+    wait(30);
+
+
+    // R2 commence après le début du swing
+    set_val(PS4_L1, 100);
+    set_val(PS4_R2, 100);
+    wait(50);
+
+
+    // Cancel du swing avec L2
+    // R2 reste maintenu
+    set_val(PS4_L1, 0);
+    set_val(PS4_L2, 100);
+    set_val(PS4_R2, 100);
+    wait(130);
+
+
+    // L2 relâché, R2 reste maintenu pour le Down Slam
+    set_val(PS4_L2, 0);
+    set_val(PS4_R2, 100);
+    wait(900);
+
+
+    set_val(PS4_R2, 0);
+}
+
+combo spidy_yoyo_combo {
+
+    set_val(PS4_R1, 100);
+    wait(50);
+
+    set_val(PS4_R1, 0);
+    wait(160);
+
+
+    set_val(PS4_CROSS, 100);
+    wait(50);
+
+    set_val(PS4_CROSS, 0);
+
+    // On garde l'attente validée :
+    // temps nécessaire pour que le pull termine correctement
+    wait(750);
+
+
+    // Premier tracer après que l'ennemi soit arrivé
+    set_val(PS4_L2, 100);
+    wait(250);
+
+    set_val(PS4_L2, 0);
+    wait(80);
+
+
+    // Uppercut
+    set_val(PS4_SQUARE, 100);
+    wait(50);
+
+    set_val(PS4_SQUARE, 0);
+    wait(287);
+
+
+    // Swing
+    set_val(PS4_L1, 100);
+    wait(30);
+
+
+    // Début maintien R2
+    set_val(PS4_L1, 100);
+    set_val(PS4_R2, 100);
+    wait(50);
+
+
+    // Deuxième tracer = cancel du swing
+    set_val(PS4_L1, 0);
+    set_val(PS4_L2, 100);
+    set_val(PS4_R2, 100);
+    wait(130);
+
+
+    // Down Slam
+    set_val(PS4_L2, 0);
+    set_val(PS4_R2, 100);
+    wait(900);
+
+
+    set_val(PS4_R2, 0);
+}
+
+/* ==============================================================================
+   BLACK CAT
+   ============================================================================== */
+
+combo blackcat_250_bnb3 {
+
+    set_val(PS4_R3, 100);
+    wait(60);
+
+    set_val(PS4_R3, 0);
+    wait(85);
+
+
+    set_val(PS4_L2, 100);
+    wait(150);
+
+
+    set_val(PS4_L2, 100);
+    set_val(PS4_R2, 100);
+    wait(120);
+
+
+    set_val(PS4_L2, 100);
+    set_val(PS4_R2, 0);
+    wait(240);
+
+
+    set_val(PS4_L2, 100);
+    set_val(PS4_R3, 100);
+    wait(60);
+
+
+    set_val(PS4_L2, 100);
+    set_val(PS4_R3, 0);
+    wait(415);
+
+
+    set_val(PS4_L2, 100);
+    wait(60);
+
+
+    set_val(PS4_L2, 100);
+    set_val(PS4_R2, 100);
+    wait(180);
+
+
+    set_val(PS4_L2, 100);
+    set_val(PS4_R2, 0);
+    wait(60);
+
+
+    set_val(PS4_L2, 0);
+}
+
+/* ==============================================================================
+   MAGIK
+   ============================================================================== */
+
+combo magik_bnb_appro1 {
+
+    set_val(PS4_R2, 100);
+    wait(50);
+    wait(150);
+
+    set_val(PS4_R1, 100);
+    set_val(PS4_R2, 0);
+    wait(50);
+
+    set_val(PS4_R1, 0);
+    wait(612);
+
+    set_val(PS4_R2, 100);
+    wait(400);
+    set_val(PS4_SQUARE, 100);
+    wait(50);
+
+    set_val(PS4_SQUARE, 0);
+    set_val(PS4_R2, 0);
+    wait(50);
+
+}
+
+
+combo magik_2d_combo {
+
+    set_val(PS4_R2, 100);
+    wait(50);
+    wait(150);
+
+    set_val(PS4_R1, 100);
+    set_val(PS4_R2, 0);
+    wait(50);
+
+    set_val(PS4_R1, 0);
+    wait(612);
+
+    set_val(PS4_R2, 100);
+    wait(400);
+    set_val(PS4_SQUARE, 100);
+    wait(150);
+
+    set_val(PS4_SQUARE, 0);
+    set_val(PS4_R2, 0);
+    wait(50);
+
+    set_val(PS4_L2, 100);
+    wait(50);
+
+    set_val(PS4_L2, 0);
+}
+
+
+combo magik_bnb {
+
+    set_val(PS4_R2, 100);
+    wait(450);
+    set_val(PS4_SQUARE, 100);
+    wait(200);
+
+    set_val(PS4_SQUARE, 0);
+    set_val(PS4_R2, 0);
+    set_val(PS4_L2, 100);
+	wait(20);
+    set_val(PS4_L2, 0);
+    wait(300);
+    set_val(PS4_R2, 100);
+    wait(480);
+    set_val(PS4_SQUARE, 100);
+	wait(100);
+	set_val(PS4_R2, 0);
+    set_val(PS4_SQUARE, 0);
+}
+
+/* ==============================================================================
+   MAGNETO
+   ============================================================================== */
+combo magneto_bnb {
+    // Premier R2
+    set_val(PS4_R2, 100);
+    wait(35);
+    set_val(PS4_R2, 0);
+
+    // Petit délai avant L1
+    wait(180);
+
+    // L1
+    set_val(PS4_L1, 100);
+    wait(100);
+    set_val(PS4_L1, 0);
+
+    // Délai avant le second R2
+    wait(700);
+
+    // Deuxième R2
+    set_val(PS4_R2, 100);
+    wait(35);
+    set_val(PS4_R2, 0);
+}
+
+/* ==============================================================================
+   DR STRANGE
+   ============================================================================== */
+
+combo strange_bnb {
+
+    set_val(PS4_R2, 100);
+    wait(148);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_R3, 100);
+    wait(50);
+
+    set_val(PS4_R2, 0);
+    set_val(PS4_R3, 0);
+}
+
+
+/* ==============================================================================
+   HELA
+   ============================================================================== */
+
+combo hela_bnb {
+
+    set_val(PS4_R2, 100);
+    wait(50);
+
+    set_val(PS4_R2, 0);
+    wait(156);
+
+    set_val(PS4_R1, 100);
+    wait(50);
+
+    set_val(PS4_R1, 0);
+    wait(495);
+
+    set_val(PS4_R2, 100);
+    wait(50);
+
+    set_val(PS4_R2, 0);
+}
+
+/* ==============================================================================
+   PSYLOCKE
+   ============================================================================== */
+
+combo psylocke_250_bnb {
+
+    set_val(PS4_R2, 100);
+    wait(50);
+
+    set_val(PS4_R2, 0);
+    wait(181);
+
+    set_val(PS4_L2, 100);
+    wait(50);
+
+    set_val(PS4_L2, 0);
+    wait(305);
+	set_val(PS4_R2, 100);
+    wait(50);
+
+    set_val(PS4_R2, 0);
+    wait(181);
+
+    set_val(PS4_L2, 100);
+    wait(50);
+
+    set_val(PS4_L2, 0);
+}
+
+
+combo psylocke_275_bnb {
+
+    set_val(PS4_R2, 100);
+    wait(50);
+
+    set_val(PS4_R2, 0);
+    wait(234);
+
+    set_val(PS4_L2, 100);
+    wait(50);
+
+    set_val(PS4_L2, 0);
+    wait(305);
+
+    set_val(PS4_R2, 100);
+    wait(234);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_L1, 100);
+    wait(50);
+
+    set_val(PS4_R2, 0);
+    set_val(PS4_L1, 0);
+}
+
+
+/* ==============================================================================
+   ELSA
+   ============================================================================== */
+
+combo elsa_250_bnb {
+
+    set_val(PS4_R2, 100);
+    wait(140);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_R1, 100);
+    wait(50);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_R1, 0);
+    wait(502);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_R1, 100);
+    wait(50);
+
+    set_val(PS4_R2, 0);
+    set_val(PS4_R1, 0);
+}
+
+
+combo elsa_300_bnb {
+
+    set_val(PS4_L1, 100);
+    wait(50);
+
+    set_val(PS4_L1, 0);
+    wait(146);
+
+    set_val(PS4_R2, 100);
+    wait(350);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_R1, 100);
+    wait(50);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_R1, 0);
+    wait(505);
+
+    set_val(PS4_R2, 100);
+    set_val(PS4_R1, 100);
+    wait(50);
+
+    set_val(PS4_R2, 0);
+    set_val(PS4_R1, 0);
+}
+
+
+/* ==============================================================================
+   AIM ASSIST REINFORCEMENT PROFILES
+   ============================================================================== */
+
+
+/* HITSCAN - regular vertical ellipse
+   Example heroes: Hela, Psylocke, Elsa
+*/
+combo aa_hitscan_profile {
+
+    set_val(PS4_RX, 4);
+    set_val(PS4_RY, 0);
+    wait(15);
+
+    set_val(PS4_RX, 3);
+    set_val(PS4_RY, 6);
+    wait(15);
+
+    set_val(PS4_RX, 0);
+    set_val(PS4_RY, 8);
+    wait(15);
+
+    set_val(PS4_RX, -3);
+    set_val(PS4_RY, 6);
+    wait(15);
+
+    set_val(PS4_RX, -4);
+    set_val(PS4_RY, 0);
+    wait(15);
+
+    set_val(PS4_RX, -3);
+    set_val(PS4_RY, -6);
+    wait(15);
+
+    set_val(PS4_RX, 0);
+    set_val(PS4_RY, -8);
+    wait(15);
+
+    set_val(PS4_RX, 3);
+    set_val(PS4_RY, -6);
+    wait(15);
+}
+
+
+/* PROJECTILE - softer/slower ellipse
+   Example heroes: Namor, Magneto, Dr Strange, Winter Soldier
+*/
+combo aa_projectile_profile {
+
+    set_val(PS4_RX, 4);
+    set_val(PS4_RY, 0);
+    wait(17);
+
+    set_val(PS4_RX, 3);
+    set_val(PS4_RY, 4);
+    wait(17);
+
+    set_val(PS4_RX, 0);
+    set_val(PS4_RY, 6);
+    wait(17);
+
+    set_val(PS4_RX, -3);
+    set_val(PS4_RY, 4);
+    wait(17);
+
+    set_val(PS4_RX, -4);
+    set_val(PS4_RY, 0);
+    wait(17);
+
+    set_val(PS4_RX, -3);
+    set_val(PS4_RY, -4);
+    wait(17);
+
+    set_val(PS4_RX, 0);
+    set_val(PS4_RY, -6);
+    wait(17);
+
+    set_val(PS4_RX, 3);
+    set_val(PS4_RY, -4);
+    wait(17);
+}
+
+
+/* MELEE - irregular/asymmetrical pattern
+   Example heroes: Spider-Man, Black Cat, Magik
+*/
+combo aa_melee_profile {
+
+    set_val(PS4_RX, 5);
+    set_val(PS4_RY, 0);
+    wait(12);
+
+    set_val(PS4_RX, -4);
+    set_val(PS4_RY, 7);
+    wait(13);
+
+    set_val(PS4_RX, 5);
+    set_val(PS4_RY, 1);
+    wait(11);
+
+    set_val(PS4_RX, 4);
+    set_val(PS4_RY, -2);
+    wait(12);
+
+    set_val(PS4_RX, 0);
+    set_val(PS4_RY, 9);
+    wait(13);
+
+    set_val(PS4_RX, 2);
+    set_val(PS4_RY, -7);
+    wait(11);
+
+    set_val(PS4_RX, -5);
+    set_val(PS4_RY, -3);
+    wait(12);
+
+    set_val(PS4_RX, 3);
+    set_val(PS4_RY, 5);
+    wait(13);
+}
+
+
+/* ==============================================================================
+   NOTIFICATIONS
+   ============================================================================== */
+
+combo notify_change {
+
+    set_rumble(RUMBLE_A, 50);
+    wait(150);
+
+    reset_rumble();
+}
+
+
+combo notify_toggle {
+
+    set_rumble(RUMBLE_B, 30);
+    wait(100);
+
+    reset_rumble();
+}
+
+
+combo notify_profile_lock {
+
+    set_rumble(RUMBLE_A, 70);
+    set_rumble(RUMBLE_B, 70);
+    wait(100);
+
+    reset_rumble();
+    wait(80);
+
+    set_rumble(RUMBLE_A, 70);
+    set_rumble(RUMBLE_B, 70);
+    wait(100);
+
+    reset_rumble();
+}
+
+
+/* ==============================================================================
+   CHARACTER PROFILE
+   ============================================================================== */
+
+function call_active_char_profile() {
+
+    if (
+        selected_char == CHAR_SPIDERMAN
+        ||
+        selected_char == CHAR_BLACKCAT
+        ||
+        selected_char == CHAR_MAGIK
+    ) {
+
+        char_type = TYPE_MELEE;
+
+        char_deadzone = 6;
+        char_threshold = char_deadzone + 3;
+    }
+
+
+    else if (
+        selected_char == CHAR_NAMOR
+        ||
+        selected_char == CHAR_MAGNETO
+        ||
+        selected_char == CHAR_DRSTRANGE
+        ||
+        selected_char == CHAR_WINTERSOLDIER
+    ) {
+
+        char_type = TYPE_PROJECTILE;
+
+        char_deadzone = 8;
+        char_threshold = char_deadzone + 4;
+    }
+
+
+    else if (
+        selected_char == CHAR_HELA
+        ||
+        selected_char == CHAR_PSYLOCKE
+        ||
+        selected_char == CHAR_ELSA
+    ) {
+
+        char_type = TYPE_HITSCAN;
+
+        char_deadzone = 4;
+        char_threshold = char_deadzone + 5;
+    }
+
+    update_display = TRUE;
+}
+
+
+/* ==============================================================================
+   OLED DISPLAY
+   ============================================================================== */
+function draw_display() {
+
+    cls_oled(OLED_BLACK);
+
+
+    if (selected_char == CHAR_SPIDERMAN) {
+
+        print(
+            2,
+            2,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_SPIDERMAN[0]
+        );
+    }
+
+    else if (selected_char == CHAR_BLACKCAT) {
+
+        print(
+            2,
+            2,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_BLACKCAT[0]
+        );
+    }
+
+    else if (selected_char == CHAR_MAGIK) {
+
+        print(
+            2,
+            2,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_MAGIK[0]
+        );
+    }
+
+    else if (selected_char == CHAR_NAMOR) {
+
+        print(
+            2,
+            2,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_NAMOR[0]
+        );
+    }
+
+    else if (selected_char == CHAR_MAGNETO) {
+
+        print(
+            2,
+            2,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_MAGNETO[0]
+        );
+    }
+
+    else if (selected_char == CHAR_DRSTRANGE) {
+
+        print(
+            2,
+            2,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_DRSTRANGE[0]
+        );
+    }
+
+    else if (selected_char == CHAR_WINTERSOLDIER) {
+
+        print(
+            2,
+            2,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_WINTERSOLDIER[0]
+        );
+    }
+
+    else if (selected_char == CHAR_HELA) {
+
+        print(
+            2,
+            2,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_HELA[0]
+        );
+    }
+
+    else if (selected_char == CHAR_PSYLOCKE) {
+
+        print(
+            2,
+            2,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_PSYLOCKE[0]
+        );
+    }
+
+    else if (selected_char == CHAR_ELSA) {
+
+        print(
+            2,
+            2,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_ELSA[0]
+        );
+    }
+
+
+    line_oled(
+        0,
+        13,
+        127,
+        13,
+        1,
+        OLED_WHITE
+    );
+
+
+    if (profile_locked) {
+
+        print(
+            2,
+            18,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_LOCKED[0]
+        );
+    }
+
+    else {
+
+        print(
+            2,
+            18,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_UNLOCKED[0]
+        );
+    }
+
+
+    if (aim_assist_enabled) {
+
+        print(
+            2,
+            32,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_AA_ON[0]
+        );
+    }
+
+    else {
+
+        print(
+            2,
+            32,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_AA_OFF[0]
+        );
+    }
+
+
+    if (macros_enabled) {
+
+        print(
+            2,
+            46,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_MACROS_ON[0]
+        );
+    }
+
+    else {
+
+        print(
+            2,
+            46,
+            OLED_FONT_SMALL,
+            OLED_WHITE,
+            TXT_MACROS_OFF[0]
+        );
+    }
+}
