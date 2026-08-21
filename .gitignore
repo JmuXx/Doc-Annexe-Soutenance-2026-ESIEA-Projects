@@ -1,0 +1,22 @@
+# Visual Studio
+.vs/
+**/.vs/
+
+# Build
+build/
+**/build/
+
+# Fichiers intermédiaires C/C++
+*.obj
+*.pch
+*.ipch
+*.pdb
+*.exp
+*.lib
+
+# Fichiers Visual Studio temporaires
+*.VC.db
+*.VC.opendb
+
+# DLL générée automatiquement dans plugins
+Projet 3 - FlipResetDetector/plugins/*.dll
